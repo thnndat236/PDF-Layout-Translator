@@ -1,9 +1,11 @@
+# app/main.py
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from configs.app_config import Config
 from routers.pdf_router import router as pdf_router
 import logging
+from celery_app import celery_app
 
 
 logging.basicConfig(

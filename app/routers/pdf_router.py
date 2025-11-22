@@ -1,10 +1,12 @@
-# routers/pdf_router.py
+# app/routers/pdf_router.py
 import io
+import base64
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from services.pdf_service import process_pdf_bytes
 from configs.font_config import FONT_PRESETS
 from configs.language_config import NAME_TO_CODE
+from tasks.pdf_task import translate_pdf_task
 
 
 router = APIRouter()
@@ -31,19 +33,33 @@ async def translate_pdf(
         return {"error": f"Font not found: {font_style}"}
 
     pdf_bytes = await file.read()
+    pdf_b64 = base64.b64encode(pdf_bytes).decode()
 
-    # Call service with font and languages to get translated-pdf
-    output_pdf_bytes = process_pdf_bytes(
-        pdf_bytes=pdf_bytes,
-        font_metadata=font_metadata,
-        source_lang_code=source_code,
-        target_lang_code=target_code
+    task = translate_pdf_task.delay(
+        pdf_b64, font_metadata, source_code, target_code
     )
+    return {"task_id": task.id, "status": "queued"}
 
-    return StreamingResponse(
-        io.BytesIO(output_pdf_bytes),
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename=translated_{source_code}2{target_code}.pdf"
+
+@router.get("/task/{task_id}")
+async def get_task_status(task_id: str):
+    task_result = translate_pdf_task.AsyncResult(task_id)
+    if task_result.state == "PENDING":
+        response = {"task_id": task_id, "status": "queued"}
+    elif task_result.state == "PROGRESS":
+        response = {"task_id": task_id, "status": "processing", "info": task_result.info}
+    elif task_result.state == "SUCCESS":
+        b64_result = task_result.result
+        pdf_bytes = base64.b64decode(b64_result)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=translated.pdf"}
+        )
+    else:  # FAILED, RETRY, etc.
+        response = {
+            "task_id": task_id,
+            "status": task_result.state,
+            "error": str(task_result.info)
         }
-    )
+    return response
