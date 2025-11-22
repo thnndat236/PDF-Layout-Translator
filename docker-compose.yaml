@@ -1,0 +1,17 @@
+services:
+  app:
+    image: qdawwn/pdf-layout-translator:v1
+    container_name: pdf-layout-translator-api
+    restart: unless-stopped
+    ports:
+      - "30000:30000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    command: uvicorn main:app --host 0.0.0.0 --port 30000
+
+  redis:
+    container_name: redis
+    image: redis:8.4-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
