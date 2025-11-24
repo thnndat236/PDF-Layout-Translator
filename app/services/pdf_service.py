@@ -20,6 +20,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def insert_figure(orig_doc, data, output_pdf_buffer):
+    """
+    Create a new PDF that contains only figure-like boxes (images, formulas, tables)
+    extracted from an existing document.
+    """
     new_doc = pymupdf.open()
 
     for page_ix, page_data in enumerate(data["pages"]):
@@ -60,6 +64,9 @@ def insert_figure(orig_doc, data, output_pdf_buffer):
 
 
 def padding_box(data, padding_small=2.5, padding_large=3):
+    """
+    Expand vertical padding for certain box types to avoid tight clipping when inserting text.
+    """
     for page_ix, page_data in enumerate(data["pages"]):
         for box_ix, box in enumerate(page_data["boxes"]):
             boxclass = box["boxclass"]
@@ -74,6 +81,9 @@ def padding_box(data, padding_small=2.5, padding_large=3):
     return data
 
 def consolidate_box_text(box):
+    """
+    Clean and merge text spans and lines found inside a layout box.
+    """
     consolidated_lines = []
     colors = []
 
@@ -85,33 +95,31 @@ def consolidate_box_text(box):
             color = span.get("color", 0)
             colors.append(color)
 
-            # 1. Loại bỏ ký tự control, non-printable (trừ space, tab, newline)
+            # Removes control/non-printable characters (except whitespace, tab, newline),
             text = ''.join(ch for ch in raw_text if unicodedata.category(ch)[0] != 'C' or ch in ' \t\n\r')
 
-            # 2. Thay thế các ký tự "dấu thanh riêng lẻ" thường gặp do lỗi font
-            #    (cực hay gặp: ̂  ́  ̀  ̉  ̃  ̣  ̆  ̛)
+            # Removes stray combining diacritics that often appear due to font issues
             text = text.replace('\u02C6', '')   # ^
             text = text.replace('\u005E', '')   # ^ (ASCII)
             text = text.replace('\u0302', '')   # combining circumflex
-            text = text.replace('\u0309', '')   # combining hook above (dấu hỏi)
-            text = text.replace('\u0306', '')   # combining breve (dấu trăng)
+            text = text.replace('\u0309', '')   # combining hook above
+            text = text.replace('\u0306', '')   # combining breve
             text = text.replace('\u0301', '')   # acute
             text = text.replace('\u0300', '')   # grave
             text = text.replace('\u0303', '')   # tilde
             text = text.replace('\u0309', '')   # hook above
             text = text.replace('\u0323', '')   # dot below
-
-            # 3. Xóa các dấu cách thừa liên tiếp (do dấu bị tách thành ký tự riêng)
+            
+            # Collapses multiple consecutive spaces
             text = re.sub(r'\s{2,}', ' ', text)
 
-            # 4. Chuẩn hóa Unicode NFC (kết hợp lại dấu nếu có thể)
+            # Normalizes Unicode (NFC)
             text = unicodedata.normalize('NFC', text)
 
-            # 5. Loại bỏ ký tự vô nghĩa lặp lại quá nhiều lần (ví dụ ̂ ̂ ̂ ̂)
-            #    Nếu một ký tự không phải chữ cái/số xuất hiện > 4 lần liên tiếp → xóa
+            # Removes repeated meaningless symbols
             text = re.sub(r'([^a-zA-Z0-9\u00C0-\u1FFF\u2000-\u206F])\1{3,}', '', text)
 
-            # 6. Cuối cùng strip và thêm vào line
+            # Joins cleaned spans into a single string
             cleaned = text.strip()
             if cleaned:
                 line_text_parts.append(cleaned)
@@ -119,10 +127,10 @@ def consolidate_box_text(box):
         if line_text_parts:
             consolidated_lines.append(" ".join(line_text_parts))
 
-    # Ghép các dòng lại thành đoạn văn (giữ ngắt dòng hợp lý)
+    # Joins cleaned lines into a single string
     consolidated_box_text = " ".join(consolidated_lines).strip()
 
-    # Lấy màu chủ đạo
+    # Get most common color
     color = Counter(colors).most_common(1)[0][0] if colors else 0
     r = (color >> 16) & 255
     g = (color >> 8) & 255
@@ -138,7 +146,6 @@ def consolidate_box_text(box):
 def simulate_text_height(text, rect, font, fontsize):
     """
     Simulate the actual height required for the text by splitting into words and estimating wrapped lines.
-    This is more accurate than simple length division as it accounts for word wrapping.
     """
     if not text.strip():
         return 0
@@ -177,6 +184,9 @@ def simulate_text_height(text, rect, font, fontsize):
 def estimate_fontsize_for_box_text(text, rect, font_name, font_file_path, boxclass,
                                   min_fontsize=4, max_fontsize=20, epochs=30,
                                   tolerance=0.01):
+    """
+    Find a font size that best fits text inside rect using a binary search.
+    """
     if not text or not text.strip():
         return min_fontsize
 
@@ -222,8 +232,13 @@ def insert_text(
     source_lang_code: str = "en",
     target_lang_code: str = "vi"
 ):
+    """
+    Insert translated text into a figure-only PDF, producing a final translated PDF.
+    """
+    # Adjusts box paddings
     data = padding_box(data, padding_small=2.5, padding_large=3)
-
+    
+    # Opens the input PDF (bytes or file-like)
     if isinstance(input_pdf_bytes, bytes):
         doc = pymupdf.open(stream=input_pdf_bytes, filetype="pdf")
     elif isinstance(input_pdf_bytes, io.BytesIO):
@@ -231,7 +246,6 @@ def insert_text(
     else:
         doc = pymupdf.open(input_pdf_bytes)
 
-    # Gom tất cả box cần dịch
     boxes_to_translate = []
 
     for page_ix, page_data in enumerate(data["pages"]):
@@ -242,8 +256,10 @@ def insert_text(
         for box in page_data["boxes"]:
             if box["boxclass"] in ["picture", "formula", "table"]:
                 continue
-
+            
+            # Consolidates text for each text box
             box_info = consolidate_box_text(box)
+            # Filters out non-text boxes
             text = box_info["box_text"].strip()
             if not text:
                 continue
@@ -262,16 +278,16 @@ def insert_text(
         doc.close()
         return
 
-    logger.info(f"Number of boxes in pdf: {total_boxes} box \n\t→ {((total_boxes - 1) // BATCH_SIZE) + 1} batch")
+    logger.info(f".:Number of boxes in pdf: {total_boxes} box, {((total_boxes - 1) // BATCH_SIZE) + 1} batch")
 
     all_translated = []
 
-    # Dịch theo batch → truyền ngôn ngữ
+    # Translates texts in batches using batch_translate
     for i in range(0, total_boxes, BATCH_SIZE):
         batch = boxes_to_translate[i:i + BATCH_SIZE]
         batch_texts = [item["text"] for item in batch]
 
-        logger.info(f"  → Translating batch {i // BATCH_SIZE + 1} ({len(batch)} box) | {source_lang_code} → {target_lang_code}...")
+        logger.info(f"\t.:Translating batch {i // BATCH_SIZE + 1} ({len(batch)} box)...")
         
         batch_translated = batch_translate(
             batch_texts,
@@ -281,12 +297,12 @@ def insert_text(
         all_translated.extend(batch_translated)
 
         if i + BATCH_SIZE < total_boxes:
-            logger.info(f"    Sleep {SLEEP_BETWEEN_REQUESTS} seconds...")
+            logger.info(f"\t.:Sleep {SLEEP_BETWEEN_REQUESTS} seconds...")
             time.sleep(SLEEP_BETWEEN_REQUESTS)
 
-    logger.info("Successfully translate all batch text!")
+    logger.info(".:Successfully translate all batch text!")
 
-    # Insert từng text đã dịch
+    # Insert translated text
     for item, translated_text in zip(boxes_to_translate, all_translated):
         page = item["page"]
         rect = item["rect"]
@@ -295,6 +311,7 @@ def insert_text(
 
         fontname = font_metadata["bold_font_name"] if boxclass in ["title", "section-header"] else font_metadata["regular_font_name"]
 
+        # Estimates appropriate font sizes
         fontsize = estimate_fontsize_for_box_text(
             text=translated_text,
             rect=rect,
@@ -311,6 +328,7 @@ def insert_text(
         attempt = 0
         success = False
 
+        # Inserts translated textboxes into pages
         while attempt < max_attempts and not success:
             try:
                 result = page.insert_textbox(
@@ -330,13 +348,14 @@ def insert_text(
                     attempt += 1
 
             except Exception as e:
-                logger.warning(f"Error inserting textbox at page {page_ix+1}: {e}")
+                logger.warning(f".:Error inserting textbox at page {page_ix+1}: {e}")
                 fontsize *= 0.99
                 attempt += 1
 
+    # Saves the final PDF into output_pdf_buffer
     doc.save(output_pdf_buffer)
     doc.close()
-    logger.info(f"Successfully translating PDF file!")
+    logger.info(f".:Successfully translating PDF file!")
 
 def process_pdf_bytes(
     pdf_bytes: bytes,
@@ -344,10 +363,13 @@ def process_pdf_bytes(
     source_lang_code: str = "en",
     target_lang_code: str = "vi"
 ) -> bytes:
-    # Load PDF gốc
+    """
+    Full pipeline entrypoint that converts an input PDF into a translated PDF (bytes).
+    """
+    # Opens the original PDF bytes
     orig_doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
 
-    # Detect layout with improved quality: higher DPI for better image/formula detection
+    # Runs layout detection to JSON (high-DPI)
     json_text = pymupdf4llm.to_json(
         orig_doc,
         image_dpi=300,
@@ -356,12 +378,12 @@ def process_pdf_bytes(
     )
     data = json.loads(json_text)
 
-    # Tạo PDF figure-only
+    # Builds a figure-only PDF
     fig_output_buffer = io.BytesIO()
     insert_figure(orig_doc=orig_doc, data=data, output_pdf_buffer=fig_output_buffer)
     fig_pdf_bytes = fig_output_buffer.getvalue()
 
-    # Chèn text vào PDF figure
+    # Inserts translated text into the figure PDF
     final_output_buffer = io.BytesIO()
     insert_text(
         data=data,
@@ -371,5 +393,5 @@ def process_pdf_bytes(
         source_lang_code=source_lang_code,
         target_lang_code=target_lang_code
     )
-
+    
     return final_output_buffer.getvalue()

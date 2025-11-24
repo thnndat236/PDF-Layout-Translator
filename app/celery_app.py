@@ -1,6 +1,5 @@
 # app/celery_app.py
 import os
-import time
 from celery import Celery
 from dotenv import load_dotenv
 
@@ -8,9 +7,9 @@ load_dotenv()
 
 celery_app = Celery(
     __name__,
-    broker=os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0"),
-    backend=os.getenv("CELERY_BACKEND_URL", "redis://redis:6379/0"),
-    include=["tasks.pdf_task"]  # we'll create this
+    broker=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+    backend=os.getenv("CELERY_BACKEND_URL", "redis://localhost:6379/0"),
+    include=["tasks.pdf_task"]
 )
 
 celery_app.conf.update(
@@ -24,4 +23,5 @@ celery_app.conf.update(
     result_expires=3600,               # clean old results after 1h
     task_time_limit=900,               # kill tasks >15 min
     task_soft_time_limit=840,
+    task_track_started=True,
 )
