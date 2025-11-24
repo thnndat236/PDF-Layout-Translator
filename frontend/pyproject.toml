@@ -1,0 +1,11 @@
+[project]
+name = "frontend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "gradio>=5.50.0",
+    "gradio-pdf>=0.0.22",
+    "requests>=2.32.5",
+]
