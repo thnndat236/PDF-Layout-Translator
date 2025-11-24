@@ -1,0 +1,20 @@
+[project]
+name = "pdf-layout-translator"
+version = "0.1.0"
+description = "An application translate academic PDFs while preserving layout"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi[standard]>=0.116.1",
+    "pydantic-settings>=2.10.1",
+    "pymupdf>=1.26.6",
+    "pymupdf-layout>=1.26.6",
+    "pymupdf4llm>=0.2.2",
+    "deep-translator>=1.11.4",
+    "opencv-python>=4.11.0.86",
+    "openai>=2.8.1",
+    "pillow>=12.0.0",
+    "celery[redis]>=5.5.3",
+    "flower>=2.0.1",
+    "redis>=5.2.1",
+]
