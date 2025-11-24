@@ -15,6 +15,7 @@ services:
       start_period: 10s
 
   api:
+    image: qdawwn/pdf-layout-translator:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -38,6 +39,7 @@ services:
     restart: unless-stopped
 
   worker:
+    image: qdawwn/pdf-layout-translator:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -74,6 +76,7 @@ services:
     restart: unless-stopped
 
   flower:
+    image: qdawwn/pdf-layout-translator:latest
     build:
       context: .
       dockerfile: Dockerfile
