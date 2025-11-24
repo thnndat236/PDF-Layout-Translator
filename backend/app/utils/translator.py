@@ -1,8 +1,6 @@
 # utils/translator.py
 import os
 import json
-import time
-import re
 import logging
 from deep_translator import GoogleTranslator
 from openai import OpenAI
@@ -25,7 +23,7 @@ groq_client = OpenAI(
 )
 
 BATCH_SIZE = 8
-SLEEP_BETWEEN_REQUESTS = 5
+SLEEP_BETWEEN_REQUESTS = 8
 
 BATCH_PROMPT = """You are an expert technical translator and text reconstructor for academic PDFs. You translate content from {source_language} into {target_language} with strict structure and formatting rules. Your task is to process multiple input segments and output a SINGLE JSON object.
 

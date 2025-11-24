@@ -6,11 +6,13 @@ import time
 from PIL import Image
 from collections import Counter
 import unicodedata
+import hashlib
 import logging
 import pymupdf
 import pymupdf.layout
 import pymupdf4llm
 from utils.translator import batch_translate, BATCH_SIZE, SLEEP_BETWEEN_REQUESTS
+from utils.redis_cache import cache_by_checksum
 
 
 logging.basicConfig(
@@ -357,6 +359,24 @@ def insert_text(
     doc.close()
     logger.info(f".:Successfully translating PDF file!")
 
+@cache_by_checksum(ttl=60 * 60 * 2, namespace="pdf_layout")
+def get_layout_data(pdf_bytes: bytes) -> dict:
+    # Open the original PDF bytes
+    orig_doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+
+    # Runs layout detection to JSON
+    json_text = pymupdf4llm.to_json(
+        orig_doc,
+        image_dpi=300,
+        image_format="png",
+        image_path=""
+    )
+
+    data = json.loads(json_text)
+
+    orig_doc.close()
+    return data
+
 def process_pdf_bytes(
     pdf_bytes: bytes,
     font_metadata: dict,
@@ -366,22 +386,15 @@ def process_pdf_bytes(
     """
     Full pipeline entrypoint that converts an input PDF into a translated PDF (bytes).
     """
-    # Opens the original PDF bytes
-    orig_doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
-
-    # Runs layout detection to JSON (high-DPI)
-    json_text = pymupdf4llm.to_json(
-        orig_doc,
-        image_dpi=300,
-        image_format="png",
-        image_path=""
-    )
-    data = json.loads(json_text)
+    # Get layout data from Redis cache
+    data = get_layout_data(pdf_bytes=pdf_bytes)
 
     # Builds a figure-only PDF
+    orig_doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
     fig_output_buffer = io.BytesIO()
     insert_figure(orig_doc=orig_doc, data=data, output_pdf_buffer=fig_output_buffer)
     fig_pdf_bytes = fig_output_buffer.getvalue()
+    orig_doc.close()
 
     # Inserts translated text into the figure PDF
     final_output_buffer = io.BytesIO()
