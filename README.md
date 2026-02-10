@@ -75,7 +75,7 @@ Flower (`http://localhost:5555`) lets you watch every task live.
 
 ```bash
 # Clone repo
-git clone https://github.com/yourname/pdf-layout-translator.git
+git clone https://github.com/thnndat236/pdf-layout-translator.git
 cd pdf-layout-translator
 
 # Copy env example
